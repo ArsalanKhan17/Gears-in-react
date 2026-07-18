@@ -12,19 +12,19 @@ const initialGears: Gear[] = [
   { id: 'output', label: 'Output gear', size: 36, color: '#5e84f6' },
 ]
 
-function gearPath(radius: number, teeth: number) {
+function gearPath(radius: number, teeth: number, valleyMultiplier = 0.84) {
   const points: string[] = []
   const steps = teeth * 4
   for (let i = 0; i < steps; i += 1) {
     const phase = i % 4
-    const r = phase === 0 || phase === 3 ? radius : radius * 0.84
+    const r = phase === 0 || phase === 3 ? radius : radius * valleyMultiplier
     const angle = (i / steps) * Math.PI * 2 - Math.PI / 2
     points.push(`${(Math.cos(angle) * r).toFixed(2)},${(Math.sin(angle) * r).toFixed(2)}`)
   }
   return `M ${points.join(' L ')} Z`
 }
 
-function GearShape({ gear, speed, paused, position, selected }: { gear: Gear; speed: number; paused: boolean; position: [number, number]; selected: boolean }) {
+function GearShape({ gear, speed, paused, position, selected, valleyMultiplier = 0.84 }: { gear: Gear; speed: number; paused: boolean; position: [number, number]; selected: boolean; valleyMultiplier?: number }) {
   const [x, y] = position
   const teeth = Math.max(10, Math.round(gear.size / 2.25))
   const labelOffset = gear.id === 'input'
@@ -44,7 +44,7 @@ function GearShape({ gear, speed, paused, position, selected }: { gear: Gear; sp
         </g>
       )}
       <g className="spin" style={{ '--speed': `${Math.max(0.45, 12 / Math.abs(speed || 0.1))}s`, '--direction': speed >= 0 ? 'normal' : 'reverse' } as CSSProperties}>
-        <path d={gearPath(gear.size, teeth)} fill={gear.color} stroke="currentColor" strokeWidth="2.5" className="gear-body" />
+        <path d={gearPath(gear.size, teeth, valleyMultiplier)} fill={gear.color} stroke="currentColor" strokeWidth="2.5" className="gear-body" />
         <circle r={gear.size * 0.56} fill="none" stroke="rgba(22, 48, 83, .18)" strokeWidth="2" />
         <path d={`M 0 0 L ${gear.size * .78} 0`} stroke="rgba(22, 48, 83, .23)" strokeWidth="2" strokeDasharray="3 5" />
         <circle r={gear.size * 0.16} fill="#fff" stroke="currentColor" strokeWidth="2" />
@@ -57,7 +57,8 @@ function App() {
   const [gears, setGears] = useState(initialGears)
   const [selected, setSelected] = useState<GearId>('input')
   const [paused, setPaused] = useState(false)
-  const [lesson, setLesson] = useState<'basics' | 'compound'>('compound')
+  const [lesson, setLesson] = useState<'basics' | 'compound' | 'teeth'>('compound')
+  const [valleyMultiplier, setValleyMultiplier] = useState(0.84)
 
   const gear = gears.find((item) => item.id === selected)!
   const input = gears[0]
@@ -74,7 +75,7 @@ function App() {
 
   const basicOutputSpeed = -input.size / output.size
   const outputSpeed = lesson === 'compound' ? speeds.output : basicOutputSpeed
-  const visibleGears = lesson === 'compound' ? gears : [input, output]
+  const visibleGears = lesson === 'compound' ? gears : lesson === 'basics' ? [input, output] : []
 
   const layout = useMemo(() => {
     const axle: [number, number] = [395, 220]
@@ -88,6 +89,7 @@ function App() {
       output: positionAt((-38 * Math.PI) / 180, small.size + output.size - 4),
       basicInput: [300, 220] as [number, number],
       basicOutput: [300 + input.size + output.size - 4, 220] as [number, number],
+      toothExplorer: [375, 215] as [number, number],
     }
   }, [input.size, large.size, small.size, output.size])
 
@@ -112,39 +114,50 @@ function App() {
       <nav className="lesson-tabs" aria-label="Lesson type">
         <button className={lesson === 'basics' ? 'active' : ''} onClick={() => { setLesson('basics'); setSelected('input') }}>01 <span>Gear basics</span></button>
         <button className={lesson === 'compound' ? 'active' : ''} onClick={() => { setLesson('compound'); setSelected('input') }}>02 <span>Compound gears</span></button>
+        <button className={lesson === 'teeth' ? 'active' : ''} onClick={() => { setLesson('teeth'); setSelected('input') }}>03 <span>Tooth shape lab</span></button>
       </nav>
 
       <section className="lab-grid">
         <aside className="control-card">
-          <div className="card-heading"><span>BUILD YOUR SYSTEM</span><span className="step">STEP 1</span></div>
-          <h2>Pick a gear to customize</h2>
-          <div className="gear-selectors">
-            {visibleGears.map((item) => (
-              <button key={item.id} className={`gear-selector ${selected === item.id ? 'selected' : ''}`} onClick={() => setSelected(item.id)}>
-                <span className="selector-dot" style={{ background: item.color }} />
-                <span><b>{item.id === 'input' ? 1 : item.id === 'large' ? 2 : item.id === 'small' ? 3 : lesson === 'basics' ? 2 : 4}</b>{item.id === 'large' || item.id === 'small' ? `${item.id === 'large' ? 'Large' : 'Small'} axle gear` : item.label}</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="control-group">
-            <label>COLOR <strong>{gear.label}</strong></label>
-            <div className="color-row">
-              {palette.map((color) => <button key={color} aria-label={`Set color ${color}`} className={`color-swatch ${gear.color === color ? 'chosen' : ''}`} style={{ background: color }} onClick={() => updateSelected({ color })} />)}
+          {lesson === 'teeth' ? <>
+            <div className="card-heading"><span>TOOTH SHAPE LAB</span><span className="step">STEP 3</span></div>
+            <h2>Change the valley depth</h2>
+            <div className="control-group tooth-control">
+              <label htmlFor="valley-depth">VALLEY MULTIPLIER <strong>{valleyMultiplier.toFixed(2)}</strong></label>
+              <input id="valley-depth" className="valley-slider" type="range" min="0.62" max="0.96" step="0.01" value={valleyMultiplier} onChange={(event) => setValleyMultiplier(Number(event.target.value))} />
+              <div className="range-labels"><span>0.62 · deep valleys</span><span>0.96 · shallow valleys</span></div>
             </div>
-          </div>
-          <div className="control-group">
-            <label>SIZE <strong>{gear.size} teeth</strong></label>
-            <div className="size-buttons">
-              {[24, 36, 48].map((size) => <button key={size} className={gear.size === size ? 'selected' : ''} onClick={() => updateSelected({ size })}>{size === 24 ? 'Small' : size === 36 ? 'Medium' : 'Large'}<span>{size} teeth</span></button>)}
+            <p className="tip"><b>Notice:</b> Lower values pull the recesses toward the center, making the teeth look taller and sharper.</p>
+          </> : <>
+            <div className="card-heading"><span>BUILD YOUR SYSTEM</span><span className="step">STEP {lesson === 'compound' ? 2 : 1}</span></div>
+            <h2>Pick a gear to customize</h2>
+            <div className="gear-selectors">
+              {visibleGears.map((item) => (
+                <button key={item.id} className={`gear-selector ${selected === item.id ? 'selected' : ''}`} onClick={() => setSelected(item.id)}>
+                  <span className="selector-dot" style={{ background: item.color }} />
+                  <span><b>{item.id === 'input' ? 1 : item.id === 'large' ? 2 : item.id === 'small' ? 3 : lesson === 'basics' ? 2 : 4}</b>{item.id === 'large' || item.id === 'small' ? `${item.id === 'large' ? 'Large' : 'Small'} axle gear` : item.label}</span>
+                </button>
+              ))}
             </div>
-          </div>
-          <p className="tip"><b>Try this:</b> Make the output gear small. What changes?</p>
+            <div className="control-group">
+              <label>COLOR <strong>{gear.label}</strong></label>
+              <div className="color-row">
+                {palette.map((color) => <button key={color} aria-label={`Set color ${color}`} className={`color-swatch ${gear.color === color ? 'chosen' : ''}`} style={{ background: color }} onClick={() => updateSelected({ color })} />)}
+              </div>
+            </div>
+            <div className="control-group">
+              <label>SIZE <strong>{gear.size} teeth</strong></label>
+              <div className="size-buttons">
+                {[24, 36, 48].map((size) => <button key={size} className={gear.size === size ? 'selected' : ''} onClick={() => updateSelected({ size })}>{size === 24 ? 'Small' : size === 36 ? 'Medium' : 'Large'}<span>{size} teeth</span></button>)}
+              </div>
+            </div>
+            <p className="tip"><b>Try this:</b> Make the output gear small. What changes?</p>
+          </>}
         </aside>
 
         <section className="stage-card">
           <div className="stage-head">
-            <div><p className="eyebrow">LIVE MODEL</p><h2>{lesson === 'compound' ? 'A compound gear train' : 'A simple gear pair'}</h2></div>
+            <div><p className="eyebrow">LIVE MODEL</p><h2>{lesson === 'compound' ? 'A compound gear train' : lesson === 'teeth' ? 'One gear, up close' : 'A simple gear pair'}</h2></div>
             <button className="play-button" onClick={() => setPaused(!paused)}>{paused ? '▶ Play' : 'Ⅱ Pause'}</button>
           </div>
           <div className="gear-stage">
@@ -158,23 +171,25 @@ function App() {
                 <GearShape gear={small} speed={speeds.small} paused={paused} position={layout.axle} selected={selected === 'small'} />
                 <GearShape gear={output} speed={speeds.output} paused={paused} position={layout.output} selected={selected === 'output'} />
                 <text x={layout.axle[0]} y={layout.axle[1] + Math.max(large.size, small.size) + 38} className="compound-label">same axle</text>
-              </> : <>
+              </> : lesson === 'basics' ? <>
                 <path d={`M ${layout.basicInput.join(' ')} L ${layout.basicOutput.join(' ')}`} className="force-line" />
                 <GearShape gear={input} speed={1} paused={paused} position={layout.basicInput} selected={selected === 'input'} />
                 <GearShape gear={output} speed={basicOutputSpeed} paused={paused} position={layout.basicOutput} selected={selected === 'output'} />
+              </> : <>
+                <GearShape gear={{ ...input, size: 92, label: 'Tooth shape explorer' }} speed={0.45} paused={paused} position={layout.toothExplorer} selected={false} valleyMultiplier={valleyMultiplier} />
+                <text x="375" y="350" className="tooth-caption">valley radius = outer radius × {valleyMultiplier.toFixed(2)}</text>
               </>}
-              <g className="annotation"><rect x="59" y="342" width="150" height="42" rx="10" /><text x="75" y="360">INPUT</text><text x="75" y="376">1 rotation / sec</text></g>
-              <g className="annotation"><rect x="526" y="46" width="156" height="42" rx="10" /><text x="542" y="64">OUTPUT</text><text x="542" y="80">{Math.abs(outputSpeed).toFixed(2)} rotations / sec</text></g>
+              {lesson !== 'teeth' && <><g className="annotation"><rect x="59" y="342" width="150" height="42" rx="10" /><text x="75" y="360">INPUT</text><text x="75" y="376">1 rotation / sec</text></g><g className="annotation"><rect x="526" y="46" width="156" height="42" rx="10" /><text x="542" y="64">OUTPUT</text><text x="542" y="80">{Math.abs(outputSpeed).toFixed(2)} rotations / sec</text></g></>}
             </svg>
           </div>
-          <div className="stage-footer"><span><i className="arrow" style={{ background: input.color }} /> Input turns clockwise</span><span><i className="arrow" style={{ background: output.color }} /> Output turns {lesson === 'compound' ? 'clockwise' : 'counterclockwise'}</span>{lesson === 'compound' ? <span>● Gears on the same axle turn together</span> : <span>↔ Meshed gears always turn opposite ways</span>}</div>
+          <div className="stage-footer">{lesson === 'teeth' ? <><span>↓ Lower multiplier = deeper valleys</span><span>↑ Higher multiplier = flatter teeth</span></> : <><span><i className="arrow" style={{ background: input.color }} /> Input turns clockwise</span><span><i className="arrow" style={{ background: output.color }} /> Output turns {lesson === 'compound' ? 'clockwise' : 'counterclockwise'}</span>{lesson === 'compound' ? <span>● Gears on the same axle turn together</span> : <span>↔ Meshed gears always turn opposite ways</span>}</>}</div>
         </section>
       </section>
 
       <section className="concept-card">
-        <div className="concept-number">02</div>
-        <div><p className="eyebrow">THE BIG IDEA</p><h2>{lesson === 'compound' ? 'Compound gears can change speed twice.' : 'One gear mesh reverses the direction.'}</h2><p>{lesson === 'compound' ? 'The large and small center gears are locked to the same axle, so they always rotate at the same speed. But each one can have a different number of teeth — creating a second gear ratio.' : 'When two gears mesh, their teeth push in opposite directions. A smaller output gear spins faster; a larger output gear spins slower.'}</p></div>
-        <div className="math-card"><span>OUTPUT SPEED</span><strong>{percentage}%</strong><p>of input speed</p><div className="formula">{lesson === 'compound' ? `${input.size} ÷ ${large.size} × ${small.size} ÷ ${output.size}` : `${input.size} ÷ ${output.size}`}</div></div>
+        <div className="concept-number">{lesson === 'teeth' ? '03' : lesson === 'compound' ? '02' : '01'}</div>
+        <div><p className="eyebrow">THE BIG IDEA</p><h2>{lesson === 'compound' ? 'Compound gears can change speed twice.' : lesson === 'teeth' ? 'Deeper valleys make teeth look sharper.' : 'One gear mesh reverses the direction.'}</h2><p>{lesson === 'compound' ? 'The large and small center gears are locked to the same axle, so they always rotate at the same speed. But each one can have a different number of teeth — creating a second gear ratio.' : lesson === 'teeth' ? 'The multiplier controls how far the recessed points sit from the center. It changes the visual profile of each tooth without changing the number of teeth.' : 'When two gears mesh, their teeth push in opposite directions. A smaller output gear spins faster; a larger output gear spins slower.'}</p></div>
+        <div className="math-card"><span>{lesson === 'teeth' ? 'VALLEY RADIUS' : 'OUTPUT SPEED'}</span><strong>{lesson === 'teeth' ? `${Math.round(valleyMultiplier * 100)}%` : `${percentage}%`}</strong><p>{lesson === 'teeth' ? 'of outer radius' : 'of input speed'}</p><div className="formula">{lesson === 'teeth' ? `radius × ${valleyMultiplier.toFixed(2)}` : lesson === 'compound' ? `${input.size} ÷ ${large.size} × ${small.size} ÷ ${output.size}` : `${input.size} ÷ ${output.size}`}</div></div>
       </section>
     </main>
   )
